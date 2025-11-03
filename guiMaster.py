@@ -24,11 +24,14 @@ class App:
         self.build_login()
 
     def setup_style(self):
-        self.bg = '#f6fbfb'
+        # Color palette: Ungu, Ungu Tua, dan Biru Langit
+        self.bg = '#E6E6FA'  # Lavender (ungu muda) untuk background
         self.card = '#ffffff'
-        self.primary = '#2b7a78'
-        self.accent = '#86bdbc'
-        self.text = '#153243'
+        self.primary = '#6A5ACD'  # Slate Blue (ungu)
+        self.accent = '#9370DB'  # Medium Purple (ungu sedang)
+        self.dark_purple = '#4B0082'  # Indigo (ungu tua)
+        self.sky_blue = '#87CEEB'  # Sky Blue (biru langit)
+        self.text = '#2F2F4F'  # Dark slate untuk text
         style = ttk.Style()
         try:
             style.theme_use('clam')
@@ -37,7 +40,7 @@ class App:
         style.configure('TFrame', background=self.bg)
         style.configure('Card.TFrame', background=self.card, relief='flat')
         style.configure('TLabel', background=self.bg, foreground=self.text, font=('Segoe UI', 10))
-        style.configure('Title.TLabel', font=('Segoe UI', 12, 'bold'), background=self.bg, foreground=self.primary)
+        style.configure('Title.TLabel', font=('Segoe UI', 12, 'bold'), background=self.bg, foreground=self.dark_purple)
         self.root.configure(background=self.bg)
 
     def clear_root(self):
@@ -64,7 +67,7 @@ class App:
         login_btn.pack(side='left', padx=6)
         reg_btn = tk.Button(btn_frame, text='Register', command=self.build_register, bg=self.accent, fg='white', width=12)
         reg_btn.pack(side='left', padx=6)
-        face_btn = tk.Button(btn_frame, text='Login with Face (Camera)...', command=self.do_login_with_face, bg='#6aa6a6', fg='white', width=20)
+        face_btn = tk.Button(btn_frame, text='Login with Face (Camera)...', command=self.do_login_with_face, bg=self.sky_blue, fg='white', width=20)
         face_btn.pack(side='left', padx=6)
         # small note if opencv not present
         if not cv2 or not has_cv2_face:
@@ -145,8 +148,8 @@ class App:
         btn_frame = ttk.Frame(card, style='Card.TFrame')
         btn_frame.grid(row=6, column=0, columnspan=3, pady=(8,0))
         tk.Button(btn_frame, text='Register (Normal)', command=do_reg, bg=self.primary, fg='white', width=16).pack(side='left', padx=6)
-        tk.Button(btn_frame, text='Register with Face (Camera)', command=register_with_camera, bg='#4fa38d', fg='white', width=20).pack(side='left', padx=6)
-        tk.Button(btn_frame, text='Back', command=self.build_login, bg=self.accent, fg='white', width=12).pack(side='left', padx=6)
+        tk.Button(btn_frame, text='Register with Face (Camera)', command=register_with_camera, bg=self.accent, fg='white', width=20).pack(side='left', padx=6)
+        tk.Button(btn_frame, text='Back', command=self.build_login, bg=self.sky_blue, fg='white', width=12).pack(side='left', padx=6)
 
     def do_login(self):
         username = self.username_entry.get().strip()
@@ -200,8 +203,8 @@ class App:
         btns.pack(fill='x', pady=6)
         tk.Button(btns, text='Materi', width=20, command=self.show_materi_student, bg=self.primary, fg='white').pack(side='left', padx=6)
         tk.Button(btns, text='Soal', width=20, command=self.show_soal_student, bg=self.accent, fg='white').pack(side='left', padx=6)
-        tk.Button(btns, text='Pesan', width=20, command=self.show_messages_student, bg='#7fbfbf', fg='white').pack(side='left', padx=6)
-        tk.Button(btns, text='Logout', width=12, command=self.logout, bg='#c94b4b', fg='white').pack(side='right', padx=6)
+        tk.Button(btns, text='Pesan', width=20, command=self.show_messages_student, bg=self.sky_blue, fg='white').pack(side='left', padx=6)
+        tk.Button(btns, text='Logout', width=12, command=self.logout, bg='#DC143C', fg='white').pack(side='right', padx=6)
 
     def show_materi_student(self):
         w = tk.Toplevel(self.root)
@@ -422,18 +425,6 @@ class App:
                 txt.insert('end', body)
                 txt.config(state='disabled')
                 mark_message_read(mid)
-
-            def reply():
-                sub = simpledialog.askstring('Subject', 'Subject (will prepend "Re: "):', initialvalue=f"Re: {subj}", parent=msgw)
-                if sub is None:
-                    return
-                body_reply = simpledialog.askstring('Reply', 'Isi pesan balasan:', parent=msgw)
-                if body_reply is None:
-                    return
-                # reply as plain (not forcing encryption). If desired, sender can choose encrypt on their sending UI.
-                add_message(self.user['id'], sender_id, sub, body_reply)
-                messagebox.showinfo('Sent', 'Balasan terkirim')
-            ttk.Button(msgw, text='Reply', command=reply).pack(pady=6)
         ttk.Button(w, text='Open', command=open_msg).pack(pady=6)
 
     # --- Dosen UI (with materi upload) ---
@@ -448,9 +439,9 @@ class App:
         btns.pack(fill='x', pady=6)
         tk.Button(btns, text='Materi', width=16, command=self.show_materi_dosen, bg=self.primary, fg='white').pack(side='left', padx=6)
         tk.Button(btns, text='Upload Materi', width=16, command=self.show_upload_material_dosen, bg=self.accent, fg='white').pack(side='left', padx=6)
-        tk.Button(btns, text='Soal (CRUD)', width=16, command=self.show_soal_dosen, bg='#9fc1bf', fg='white').pack(side='left', padx=6)
-        tk.Button(btns, text='Kirim Pesan', width=16, command=self.show_send_message_dosen, bg='#6aa6a6', fg='white').pack(side='left', padx=6)
-        tk.Button(btns, text='Logout', width=12, command=self.logout, bg='#c94b4b', fg='white').pack(side='right', padx=6)
+        tk.Button(btns, text='Soal (CRUD)', width=16, command=self.show_soal_dosen, bg=self.dark_purple, fg='white').pack(side='left', padx=6)
+        tk.Button(btns, text='Kirim Pesan', width=16, command=self.show_send_message_dosen, bg=self.sky_blue, fg='white').pack(side='left', padx=6)
+        tk.Button(btns, text='Logout', width=12, command=self.logout, bg='#DC143C', fg='white').pack(side='right', padx=6)
 
     def show_materi_dosen(self):
         w = tk.Toplevel(self.root)
@@ -656,7 +647,7 @@ class App:
         btn_frame.pack(pady=8)
         tk.Button(btn_frame, text='Add Question', command=add_q, bg=self.primary, fg='white', width=14).pack(side='left', padx=6)
         tk.Button(btn_frame, text='Delete Selected', command=delete_q, bg='#d36b6b', fg='white', width=14).pack(side='left', padx=6)
-        ttk.Button(self.root, text='Back', command=self.build_dosen).pack(pady=10)
+        tk.Button(btn_frame, text='Back', command=self.build_dosen, bg=self.sky_blue, fg='white', width=14).pack(side='left', padx=6)
 
     def show_send_message_dosen(self):
         students = get_users_by_role('mahasiswa')
