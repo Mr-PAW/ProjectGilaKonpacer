@@ -90,16 +90,6 @@ class App:
         ttk.Radiobutton(card, text='Mahasiswa', variable=role_var, value='mahasiswa').grid(row=3, column=0, sticky='w', padx=4, pady=6)
         ttk.Radiobutton(card, text='Dosen', variable=role_var, value='dosen').grid(row=3, column=1, sticky='w', padx=4, pady=6)
 
-        # Face registration optional via camera or upload
-        self._reg_face_path = ''
-        def choose_face():
-            p = filedialog.askopenfilename(filetypes=[('Images','*.png;*.jpg;*.jpeg;*.bmp;*.gif'),('All files','*.*')])
-            if p:
-                self._reg_face_path = p
-                face_label.config(text=os.path.basename(p))
-        ttk.Button(card, text='(Optional) Upload Face Image...', command=choose_face).grid(row=4, column=0, sticky='w', padx=4, pady=6)
-        face_label = ttk.Label(card, text='No face image selected')
-        face_label.grid(row=4, column=1, sticky='w')
 
         # Camera-based face registration
         def register_with_camera():
