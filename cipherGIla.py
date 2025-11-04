@@ -65,23 +65,120 @@ def xor_decrypt_text(hexcipher: str, key: str) -> str:
     return out.decode('utf-8', errors='replace')
 
 def super_encrypt_text(plaintext: str, key: str) -> str:
-    stage1 = vigenere_encrypt_text(plaintext, key)
-    if key:
-        shift = sum(bytearray(key.encode('utf-8'))) % 26
+    # Support composite key format for super encryption so each stage can use a
+    # different key. Expected composite format: 'vig=<vigenere_key>;caesar=<shift>;xor=<xor_key>'
+    # If provided key doesn't match composite format, fall back to legacy behavior
+    # where the same `key` is used for all stages.
+    def _parse_super_key(k: str):
+        if not k:
+            return ('', None, '')
+        # try simple parser splitting by ';' and '='
+        parts = [p.strip() for p in k.split(';') if '=' in p]
+        if not parts:
+            return (k, None, k)
+        vig = ''
+        caesar = None
+        xr = ''
+        for p in parts:
+            try:
+                name, val = p.split('=', 1)
+            except ValueError:
+                continue
+            name = name.strip().lower()
+            val = val.strip()
+            if name in ('vig', 'vigenere'):
+                vig = val
+            elif name == 'caesar':
+                try:
+                    caesar = int(val)
+                except Exception:
+                    caesar = None
+            elif name in ('xor', 'xorkey'):
+                xr = val
+        # If caesar not specified but vig provided, leave caesar as None to derive later
+        return (vig or '', caesar, xr or '')
+
+    vig_key, caesar_key, xor_key = _parse_super_key(key)
+
+    # Stage 1: Vigenere (use provided vig_key or legacy use of `key`)
+    if vig_key:
+        stage1 = vigenere_encrypt_text(plaintext, vig_key)
     else:
-        shift = 0
+        stage1 = vigenere_encrypt_text(plaintext, key)
+
+    # Stage 2: Caesar (use provided numeric caesar_key; if not provided, derive from vig_key or legacy key)
+    if caesar_key is None:
+        base_for_shift = vig_key if vig_key else key
+        if base_for_shift:
+            try:
+                shift = sum(bytearray(base_for_shift.encode('utf-8'))) % 26
+            except Exception:
+                shift = 0
+        else:
+            shift = 0
+    else:
+        shift = caesar_key % 26
     stage2 = caesar_encrypt_text(stage1, shift)
-    stage3 = xor_encrypt_text(stage2, key)
+
+    # Stage 3: XOR (use xor_key if present, else legacy key)
+    use_xor_key = xor_key if xor_key else key
+    stage3 = xor_encrypt_text(stage2, use_xor_key)
     return stage3
 
 def super_decrypt_text(ciphertext: str, key: str) -> str:
-    stage1 = xor_decrypt_text(ciphertext, key)
-    if key:
-        shift = sum(bytearray(key.encode('utf-8'))) % 26
+    # Parse composite key format similar to super_encrypt_text
+    def _parse_super_key(k: str):
+        if not k:
+            return ('', None, '')
+        parts = [p.strip() for p in k.split(';') if '=' in p]
+        if not parts:
+            return (k, None, k)
+        vig = ''
+        caesar = None
+        xr = ''
+        for p in parts:
+            try:
+                name, val = p.split('=', 1)
+            except ValueError:
+                continue
+            name = name.strip().lower()
+            val = val.strip()
+            if name in ('vig', 'vigenere'):
+                vig = val
+            elif name == 'caesar':
+                try:
+                    caesar = int(val)
+                except Exception:
+                    caesar = None
+            elif name in ('xor', 'xorkey'):
+                xr = val
+        return (vig or '', caesar, xr or '')
+
+    vig_key, caesar_key, xor_key = _parse_super_key(key)
+
+    # Stage 1: XOR decrypt
+    use_xor_key = xor_key if xor_key else key
+    stage1 = xor_decrypt_text(ciphertext, use_xor_key)
+
+    # Stage 2: Caesar decrypt
+    if caesar_key is None:
+        base_for_shift = vig_key if vig_key else key
+        if base_for_shift:
+            try:
+                shift = sum(bytearray(base_for_shift.encode('utf-8'))) % 26
+            except Exception:
+                shift = 0
+        else:
+            shift = 0
     else:
-        shift = 0
+        shift = caesar_key % 26
     stage2 = caesar_decrypt_text(stage1, shift)
-    stage3 = vigenere_decrypt_text(stage2, key)
+
+    # Stage 3: Vigenere decrypt
+    if vig_key:
+        stage3 = vigenere_decrypt_text(stage2, vig_key)
+    else:
+        stage3 = vigenere_decrypt_text(stage2, key)
     return stage3
 
 def encrypt_file_bytes(data: bytes, cipher: str, key: str) -> bytes:

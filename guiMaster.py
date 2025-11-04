@@ -24,24 +24,58 @@ class App:
         self.build_login()
 
     def setup_style(self):
-        # Color palette: Ungu, Ungu Tua, dan Biru Langit
-        self.bg = '#E6E6FA'  # Lavender (ungu muda) untuk background
-        self.card = '#ffffff'
-        self.primary = '#6A5ACD'  # Slate Blue (ungu)
-        self.accent = '#9370DB'  # Medium Purple (ungu sedang)
-        self.dark_purple = '#4B0082'  # Indigo (ungu tua)
-        self.sky_blue = '#87CEEB'  # Sky Blue (biru langit)
-        self.text = '#2F2F4F'  # Dark slate untuk text
+        # macOS-like color palette and typography
+        # Light macOS background, white cards, and system blue accent
+        self.bg = '#F5F5F7'    # macOS light window background
+        self.card = '#FFFFFF'
+        self.primary = '#007AFF'  # macOS blue
+        self.accent = '#0A84FF'
+        # Additional palette variables used across the UI
+        self.dark_purple = '#3A3A3C'
+        self.sky_blue = '#5AC8FA'
+        self.text = '#1D1D1F'  # primary text color
+        self.subtext = '#6E6E73'
+
         style = ttk.Style()
+        # Prefer a neutral theme that allows custom styling
         try:
             style.theme_use('clam')
         except Exception:
-            pass
+            try:
+                style.theme_use('default')
+            except Exception:
+                pass
+
+        # General frame/background
         style.configure('TFrame', background=self.bg)
         style.configure('Card.TFrame', background=self.card, relief='flat')
-        style.configure('TLabel', background=self.bg, foreground=self.text, font=('Segoe UI', 10))
-        style.configure('Title.TLabel', font=('Segoe UI', 12, 'bold'), background=self.bg, foreground=self.dark_purple)
-        self.root.configure(background=self.bg)
+
+        # Labels & titles
+        # Use macOS-like fonts where available; fall back to common fonts
+        title_font = ('Helvetica Neue', 13, 'bold')
+        normal_font = ('Helvetica Neue', 11)
+        try:
+            style.configure('TLabel', background=self.bg, foreground=self.text, font=normal_font)
+            style.configure('Title.TLabel', font=title_font, background=self.bg, foreground=self.text)
+        except Exception:
+            style.configure('TLabel', background=self.bg, foreground=self.text)
+            style.configure('Title.TLabel', background=self.bg, foreground=self.text)
+
+        # Buttons - add an accent style for primary actions
+        style.configure('TButton', font=normal_font, padding=6)
+        style.configure('Accent.TButton', background=self.primary, foreground='white', font=normal_font, padding=6)
+        # Small card visuals
+        style.map('Accent.TButton', background=[('active', self.accent)])
+
+        # Treeview and headings
+        style.configure('Treeview', background='white', fieldbackground='white', foreground=self.text)
+        style.configure('Treeview.Heading', font=normal_font)
+
+        # Apply window background
+        try:
+            self.root.configure(background=self.bg)
+        except Exception:
+            pass
 
     def clear_root(self):
         for w in self.root.winfo_children():
@@ -114,7 +148,10 @@ class App:
             # store user with face marker '1' in face_hash column to indicate face-registered
             ok3, err = add_user(username, role, password, face_hash='1')
             if not ok3:
-                messagebox.showerror('Error', f'Gagal register user: {err}')
+                if err and 'UNIQUE constraint failed' in err:
+                    messagebox.showerror('Error', 'Username sudah digunakan. Pilih username lain.')
+                else:
+                    messagebox.showerror('Error', f'Gagal register user: {err}')
                 return
             messagebox.showinfo('Success', 'Registered with face. Model updated.')
             self.build_login()
@@ -134,7 +171,11 @@ class App:
                 messagebox.showinfo('Success', 'Registered. Please login.')
                 self.build_login()
             else:
-                messagebox.showerror('Error', f'Failed to register: {err}')
+                # nicer message for duplicate username
+                if err and 'UNIQUE constraint failed' in err:
+                    messagebox.showerror('Error', 'Username sudah ada. Gunakan username lain.')
+                else:
+                    messagebox.showerror('Error', f'Failed to register: {err}')
         btn_frame = ttk.Frame(card, style='Card.TFrame')
         btn_frame.grid(row=6, column=0, columnspan=3, pady=(8,0))
         tk.Button(btn_frame, text='Register (Normal)', command=do_reg, bg=self.primary, fg='white', width=16).pack(side='left', padx=6)
@@ -345,7 +386,93 @@ class App:
                 messagebox.showinfo('Benar', 'Jawaban benar!')
             else:
                 messagebox.showerror('Salah', f'Jawaban salah. Jawaban benar: {answer}')
-        ttk.Button(w, text='Check', command=check).pack(pady=6)
+
+        def decrypt_answer():
+            lc = (cipher or '').lower()
+            try:
+                if lc == 'vigenere':
+                    k = simpledialog.askstring('Vigenere key', 'Masukkan Vigenere key untuk dekripsi:', parent=w)
+                    if k is None:
+                        return
+                    if not k or not k.isalpha():
+                        messagebox.showerror('Error', 'Vigenere key harus berisi huruf saja (A-Z).')
+                        return
+                    dec = vigenere_decrypt_text(answer, k)
+                elif lc == 'caesar':
+                    ks = simpledialog.askstring('Caesar key', 'Masukkan Caesar shift (integer):', parent=w)
+                    if ks is None:
+                        return
+                    try:
+                        k = int(ks)
+                    except Exception:
+                        messagebox.showerror('Error', 'Caesar key harus berupa angka (integer).')
+                        return
+                    dec = caesar_decrypt_text(answer, k)
+                elif lc == 'xor':
+                    k = simpledialog.askstring('XOR key', 'Masukkan XOR key untuk dekripsi (digits only):', parent=w)
+                    if k is None:
+                        return
+                    if not k.isdigit():
+                        messagebox.showerror('Error', 'XOR key harus berupa angka (digit sequence).')
+                        return
+                    dec = xor_decrypt_text(answer, k)
+                elif lc == 'super':
+                    use_separate = messagebox.askyesno('Super Cipher', 'Gunakan kunci terpisah untuk Caesar / Vigenere / XOR?')
+                    if use_separate:
+                        # Ask in order Caesar, Vigenere, XOR as requested
+                        caes = simpledialog.askstring('Caesar shift', 'Masukkan Caesar shift (integer, leave empty to derive):', parent=w)
+                        vig = simpledialog.askstring('Vigenere key', 'Masukkan Vigenere key (leave empty to skip):', parent=w)
+                        xr = simpledialog.askstring('XOR key', 'Masukkan XOR key (leave empty to skip):', parent=w)
+                        if caes is None and vig is None and xr is None:
+                            return
+                        # validate
+                        if vig and not vig.isalpha():
+                            messagebox.showerror('Error', 'Vigenere key harus berisi huruf saja (A-Z).')
+                            return
+                        if caes:
+                            try:
+                                int(caes)
+                            except Exception:
+                                messagebox.showerror('Error', 'Caesar shift harus berupa angka (integer).')
+                                return
+                        if xr and not xr.isdigit():
+                            messagebox.showerror('Error', 'XOR key harus berupa angka (digit sequence).')
+                            return
+                        parts = []
+                        if vig:
+                            parts.append(f"vig={vig}")
+                        if caes:
+                            parts.append(f"caesar={caes}")
+                        if xr:
+                            parts.append(f"xor={xr}")
+                        comp = ';'.join(parts)
+                        dec = super_decrypt_text(answer, comp)
+                    else:
+                        k = simpledialog.askstring('Super key', 'Masukkan single key untuk super dekripsi (legacy):', parent=w)
+                        if k is None:
+                            return
+                        if not k:
+                            messagebox.showerror('Error', 'Key diperlukan untuk dekripsi.')
+                            return
+                        dec = super_decrypt_text(answer, k)
+                else:
+                    messagebox.showerror('Error', 'Cipher tidak dikenali')
+                    return
+
+                # Show decrypted text in a small viewer
+                dv = tk.Toplevel(w)
+                dv.title('Decrypted Answer')
+                t = tk.Text(dv, width=80, height=12)
+                t.pack(padx=8, pady=8)
+                t.insert('end', dec)
+                t.config(state='disabled')
+            except Exception as e:
+                messagebox.showerror('Error', f'Gagal dekripsi: {e}')
+
+        btn_frame = ttk.Frame(w)
+        btn_frame.pack(pady=6)
+        ttk.Button(btn_frame, text='Check', command=check).pack(side='left', padx=6)
+        ttk.Button(btn_frame, text='Decrypt Answer', command=decrypt_answer).pack(side='left', padx=6)
 
     def show_messages_student(self):
         inbox = get_inbox_for_user(self.user['id'])
@@ -392,21 +519,65 @@ class App:
                     key = simpledialog.askstring('Decrypt Message', 'Masukkan key untuk mendekripsi pesan:', parent=msgw)
                     if key is None:
                         return
-                    
+
                     lc = (cipher or '').lower()
                     try:
                         if lc == 'vigenere':
+                            # validate alphabetic
+                            if not key or not key.isalpha():
+                                messagebox.showerror('Error', 'Vigenere key harus berisi huruf saja (A-Z).')
+                                return
                             dec = vigenere_decrypt_text(body, key)
                         elif lc == 'caesar':
                             try:
                                 k = int(key)
-                            except:
-                                k = 0
+                            except Exception:
+                                messagebox.showerror('Error', 'Caesar key harus berupa angka (integer).')
+                                return
                             dec = caesar_decrypt_text(body, k)
                         elif lc == 'xor':
+                            # require digits-only key (per requested validation)
+                            if not key.isdigit():
+                                messagebox.showerror('Error', 'XOR key harus berupa angka (digit sequence).')
+                                return
                             dec = xor_decrypt_text(body, key)
                         elif lc == 'super':
-                            dec = super_decrypt_text(body, key)
+                            # Ask whether to use separate keys for each stage or a single legacy key
+                            use_separate = messagebox.askyesno('Super Cipher', 'Use separate keys for Vigenere / Caesar / XOR?')
+                            if use_separate:
+                                vig = simpledialog.askstring('Vigenere key', 'Masukkan Vigenere key (leave empty to skip):', parent=msgw)
+                                caes = simpledialog.askstring('Caesar shift', 'Masukkan Caesar shift (integer, leave empty to derive):', parent=msgw)
+                                xr = simpledialog.askstring('XOR key', 'Masukkan XOR key (leave empty to skip):', parent=msgw)
+                                if vig is None and caes is None and xr is None:
+                                    return
+                                # validate provided parts
+                                if vig and not vig.isalpha():
+                                    messagebox.showerror('Error', 'Vigenere key harus berisi huruf saja (A-Z).')
+                                    return
+                                if caes:
+                                    try:
+                                        int(caes)
+                                    except Exception:
+                                        messagebox.showerror('Error', 'Caesar shift harus berupa angka (integer).')
+                                        return
+                                if xr and not xr.isdigit():
+                                    messagebox.showerror('Error', 'XOR key harus berupa angka (digit sequence).')
+                                    return
+                                parts = []
+                                if vig:
+                                    parts.append(f"vig={vig}")
+                                if caes:
+                                    parts.append(f"caesar={caes}")
+                                if xr:
+                                    parts.append(f"xor={xr}")
+                                comp = ';'.join(parts)
+                                dec = super_decrypt_text(body, comp)
+                            else:
+                                # legacy single-key behavior: allow any non-empty key
+                                if not key:
+                                    messagebox.showerror('Error', 'Key diperlukan untuk dekripsi.')
+                                    return
+                                dec = super_decrypt_text(body, key)
                         else:
                             messagebox.showerror('Error', 'Cipher tidak dikenali')
                             return
@@ -446,7 +617,7 @@ class App:
         btns.pack(fill='x', pady=6)
         tk.Button(btns, text='Materi', width=16, command=self.show_materi_dosen, bg=self.primary, fg='white').pack(side='left', padx=6)
         tk.Button(btns, text='Upload Materi', width=16, command=self.show_upload_material_dosen, bg=self.accent, fg='white').pack(side='left', padx=6)
-        tk.Button(btns, text='Soal (CRUD)', width=16, command=self.show_soal_dosen, bg=self.dark_purple, fg='white').pack(side='left', padx=6)
+        tk.Button(btns, text='Soal', width=16, command=self.show_soal_dosen, bg=self.dark_purple, fg='white').pack(side='left', padx=6)
         tk.Button(btns, text='Kirim Pesan', width=16, command=self.show_send_message_dosen, bg=self.sky_blue, fg='white').pack(side='left', padx=6)
         tk.Button(btns, text='Logout', width=12, command=self.logout, bg='#DC143C', fg='white').pack(side='right', padx=6)
 
@@ -605,26 +776,112 @@ class App:
             dlg.title('Tambah Soal')
             ttk.Label(dlg, text='Cipher:').grid(row=0, column=0, sticky='w', padx=6, pady=6)
             cipher_var = tk.StringVar(value='Caesar')
-            ttk.Combobox(dlg, values=['Caesar', 'Vigenere', 'Xor', 'Super'], textvariable=cipher_var).grid(row=0, column=1, padx=6, pady=6)
+            cb = ttk.Combobox(dlg, values=['Caesar', 'Vigenere', 'Xor', 'Super'], textvariable=cipher_var)
+            cb.grid(row=0, column=1, padx=6, pady=6)
             ttk.Label(dlg, text='Plain Text:').grid(row=1, column=0, sticky='w', padx=6, pady=6)
             plain_ent = ttk.Entry(dlg, width=60)
             plain_ent.grid(row=1, column=1, padx=6, pady=6)
             ttk.Label(dlg, text='Key:').grid(row=2, column=0, sticky='w', padx=6, pady=6)
+            # Single key entry (used for non-super ciphers)
             key_ent = ttk.Entry(dlg, width=40)
             key_ent.grid(row=2, column=1, padx=6, pady=6)
+
+            # Additional entries for Super cipher (Caesar, Vigenere, XOR) in requested order
+            caesar_label = ttk.Label(dlg, text='Caesar shift:')
+            caesar_ent = ttk.Entry(dlg, width=10)
+            vig_label = ttk.Label(dlg, text='Vigenere key:')
+            vig_ent = ttk.Entry(dlg, width=30)
+            xor_label = ttk.Label(dlg, text='XOR key:')
+            xor_ent = ttk.Entry(dlg, width=30)
+
+            # place them but hide initially (rows 3..5)
+            caesar_label.grid(row=3, column=0, sticky='w', padx=6, pady=2)
+            caesar_ent.grid(row=3, column=1, sticky='w', padx=6, pady=2)
+            vig_label.grid(row=4, column=0, sticky='w', padx=6, pady=2)
+            vig_ent.grid(row=4, column=1, sticky='w', padx=6, pady=2)
+            xor_label.grid(row=5, column=0, sticky='w', padx=6, pady=2)
+            xor_ent.grid(row=5, column=1, sticky='w', padx=6, pady=2)
+            caesar_label.grid_remove(); caesar_ent.grid_remove(); vig_label.grid_remove(); vig_ent.grid_remove(); xor_label.grid_remove(); xor_ent.grid_remove()
+
+            def _on_cipher_change(*args):
+                val = (cipher_var.get() or '').lower()
+                if val == 'super':
+                    # hide single key, show the three keys
+                    key_ent.grid_remove()
+                    caesar_label.grid(); caesar_ent.grid(); vig_label.grid(); vig_ent.grid(); xor_label.grid(); xor_ent.grid()
+                else:
+                    # show single key, hide extras
+                    key_ent.grid(); caesar_label.grid_remove(); caesar_ent.grid_remove(); vig_label.grid_remove(); vig_ent.grid_remove(); xor_label.grid_remove(); xor_ent.grid_remove()
+
+            cipher_var.trace_add('write', _on_cipher_change)
+            # call once to set initial visibility
+            _on_cipher_change()
             def do_add():
                 cipher = cipher_var.get()
                 plain = plain_ent.get()
-                key = key_ent.get()
+                # For Super cipher, compose a composite key string
+                if (cipher or '').lower() == 'super':
+                    vig = vig_ent.get().strip()
+                    caes = caesar_ent.get().strip()
+                    xr = xor_ent.get().strip()
+                    parts = []
+                    if vig:
+                        parts.append(f"vig={vig}")
+                    if caes:
+                        parts.append(f"caesar={caes}")
+                    if xr:
+                        parts.append(f"xor={xr}")
+                    key = ';'.join(parts)
+                else:
+                    key = key_ent.get()
                 if not plain:
                     messagebox.showwarning('Error', 'Plain text required')
                     return
+
+                # Validate keys according to cipher type
+                lc = (cipher or '').lower()
+                if lc == 'caesar':
+                    # single key_ent must be integer
+                    k = key_ent.get().strip()
+                    try:
+                        int(k)
+                    except Exception:
+                        messagebox.showerror('Error', 'Caesar key harus berupa angka (integer).')
+                        return
+                elif lc == 'vigenere':
+                    k = key_ent.get().strip()
+                    if not k or not k.isalpha():
+                        messagebox.showerror('Error', 'Vigenere key harus berisi huruf saja (A-Z).')
+                        return
+                elif lc == 'xor':
+                    k = key_ent.get().strip()
+                    if not k or not k.isdigit():
+                        messagebox.showerror('Error', 'XOR key harus berupa angka (digit sequence).')
+                        return
+                elif lc == 'super':
+                    # validate provided parts (if any)
+                    vig_val = vig_ent.get().strip()
+                    caes_val = caesar_ent.get().strip()
+                    xr_val = xor_ent.get().strip()
+                    if vig_val and not vig_val.isalpha():
+                        messagebox.showerror('Error', 'Vigenere key harus berisi huruf saja (A-Z).')
+                        return
+                    if caes_val:
+                        try:
+                            int(caes_val)
+                        except Exception:
+                            messagebox.showerror('Error', 'Caesar shift harus berupa angka (integer).')
+                            return
+                    if xr_val and not xr_val.isdigit():
+                        messagebox.showerror('Error', 'XOR key harus berupa angka (digit sequence).')
+                        return
                 answer = add_question(cipher, plain, key)
                 messagebox.showinfo('Added', f'Soal ditambahkan. Jawaban: {answer}')
                 dlg.destroy()
                 refresh()
-            ttk.Button(dlg, text='Add', command=do_add).grid(row=3, column=0, padx=6, pady=8)
-            ttk.Button(dlg, text='Cancel', command=dlg.destroy).grid(row=3, column=1, padx=6, pady=8)
+            # Place Add/Cancel below the super key inputs (row 6)
+            ttk.Button(dlg, text='Add', command=do_add).grid(row=6, column=0, padx=6, pady=8)
+            ttk.Button(dlg, text='Cancel', command=dlg.destroy).grid(row=6, column=1, padx=6, pady=8)
         def delete_q():
             sel = tree.selection()
             if not sel:
@@ -678,7 +935,11 @@ class App:
             if not key:
                 messagebox.showwarning('Error', 'Key untuk enkripsi diperlukan')
                 return
-            
+            # Validate vigenere key: must be alphabetic
+            if not key.isalpha():
+                messagebox.showerror('Error', 'Vigenere key harus berisi huruf saja (A-Z).')
+                return
+
             # Encrypt with Vigenere
             cipher = 'vigenere'
             enc_body = vigenere_encrypt_text(body, key)
