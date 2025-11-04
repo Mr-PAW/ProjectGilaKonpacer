@@ -5,7 +5,19 @@ from tryImportCV2 import cv2, has_cv2_face
 MATERIAL_DIR = 'materials' #untuk menyimpan materi di section materi
 FACES_DIR = 'faces' #menyimpan wajah 
 FACE_MODEL_FILE = 'face_model.yml' #model wajah LBPH
-HAAR_CASCADE = None
+
+# Initialize HAAR_CASCADE
+try:
+    if cv2:
+        HAAR_CASCADE = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
+    else:
+        HAAR_CASCADE = None
+except Exception:
+    HAAR_CASCADE = None
+
+# Create necessary directories if they don't exist
+os.makedirs(MATERIAL_DIR, exist_ok=True)
+os.makedirs(FACES_DIR, exist_ok=True)
 
 
 # face recognition-ish section (ngide si Raffy) mboh lah

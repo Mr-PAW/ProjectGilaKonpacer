@@ -6,11 +6,11 @@ import datetime
 from cipherGIla import caesar_decrypt_text, vigenere_decrypt_text, xor_decrypt_text, super_decrypt_text, decrypt_file_bytes, caesar_encrypt_text, encrypt_file_bytes, vigenere_encrypt_text, xor_encrypt_text, super_encrypt_text
 from database import DB_FILE, add_user, authenticate, verify_password, init_db
 from ideGilaRaffy import recognize_face_login, train_face_model, capture_face_samples, MATERIAL_DIR, FACE_MODEL_FILE, FACES_DIR
-from hashPass import image_hash_bytes, verify_password, hash_password
-from steganografi import extract_text_from_image, embed_text_in_image, extract_text_from_image, embed_text_in_image
+from hashPass import image_hash_bytes, hash_password
+from steganografi import extract_text_from_image, embed_text_in_image
 from materi import add_material, list_materials, get_material
 from soal import get_questions_by_cipher, add_question, get_all_questions, delete_question
-from pesan import get_inbox_for_user, mark_message_read, get_users_by_role, add_message, get_inbox_for_user, mark_message_read, get_users_by_role
+from pesan import get_inbox_for_user, mark_message_read, get_users_by_role, add_message
 from tryImportCV2 import cv2, has_cv2_face
 
 
