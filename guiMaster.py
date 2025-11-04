@@ -237,19 +237,20 @@ class App:
             matw.title(f'Materi: {title}')
             ttk.Label(matw, text=f'{title} ({mtype})', style='Title.TLabel').pack(anchor='w', padx=8, pady=6)
             ttk.Label(matw, text=f'Uploaded: {ts} | File: {original_name or ""} | Cipher: {cipher or "-"}').pack(anchor='w', padx=8)
-            def download_plain():
-                dest = filedialog.asksaveasfilename(initialfile=(original_name or os.path.basename(filepath)))
-                if not dest:
-                    return
-                try:
-                    with open(filepath, 'rb') as fsrc, open(dest, 'wb') as fdst:
-                        fdst.write(fsrc.read())
-                    messagebox.showinfo('Downloaded', f'File saved to {dest}')
-                except Exception as e:
-                    messagebox.showerror('Error', f'Failed: {e}')
-            ttk.Button(matw, text='Download (as stored)', command=download_plain).pack(pady=6)
 
             if mtype == 'stego':
+                def download_stego():
+                    dest = filedialog.asksaveasfilename(initialfile=(original_name or os.path.basename(filepath)))
+                    if not dest:
+                        return
+                    try:
+                        with open(filepath, 'rb') as fsrc, open(dest, 'wb') as fdst:
+                            fdst.write(fsrc.read())
+                        messagebox.showinfo('Downloaded', f'File saved to {dest}')
+                    except Exception as e:
+                        messagebox.showerror('Error', f'Failed: {e}')
+                ttk.Button(matw, text='Download Image', command=download_stego).pack(pady=6)
+                
                 def extract():
                     txt = extract_text_from_image(filepath)
                     if txt is None:
@@ -263,44 +264,37 @@ class App:
                         t.config(state='disabled')
                 ttk.Button(matw, text='Extract Hidden Text', command=extract).pack(pady=4)
             elif mtype == 'file':
-                # If this file is a PDF-lock (cipher == 'pdf_lock' and pw hash exists), ask for pwd to allow download
-                if (cipher or '') == 'pdf_lock' and pw_salt and pw_hash:
-                    def unlock_and_download():
-                        pwd = simpledialog.askstring('Unlock PDF', 'Masukkan password untuk membuka file (seperti yang dikirim dosen):', parent=matw, show='*')
-                        if pwd is None:
+                # All encrypted files require password verification to decrypt and download
+                if pw_salt and pw_hash:
+                    def decrypt_and_download():
+                        password = simpledialog.askstring('Password Required', 
+                                                         'Masukkan password untuk mendekripsi file (tanyakan ke dosen):', 
+                                                         parent=matw, show='*')
+                        if password is None:
                             return
-                        if verify_password(pwd, pw_salt, pw_hash):
-                            dest = filedialog.asksaveasfilename(initialfile=(original_name or os.path.basename(filepath)))
-                            if not dest:
-                                return
-                            try:
-                                with open(filepath, 'rb') as fsrc, open(dest, 'wb') as fdst:
-                                    fdst.write(fsrc.read())
-                                messagebox.showinfo('Downloaded', f'File unlocked and saved to {dest}')
-                            except Exception as e:
-                                messagebox.showerror('Error', f'Failed: {e}')
-                        else:
-                            messagebox.showerror('Error', 'Password salah')
-                    ttk.Button(matw, text='Unlock & Download (PDF locked)', command=unlock_and_download).pack(pady=6)
-                else:
-                    # normal encrypted file (bytes-level); ask for key to decrypt and save
-                    def decrypt_action():
-                        key = simpledialog.askstring('Decrypt', 'Masukkan key untuk dekripsi (sama seperti yang dipakai dosen):', parent=matw)
-                        if key is None:
+                        # Verify password
+                        if not verify_password(password, pw_salt, pw_hash):
+                            messagebox.showerror('Error', 'Password salah!')
                             return
+                        # Password correct, decrypt file
                         try:
                             with open(filepath, 'rb') as f:
-                                enc = f.read()
-                            dec = decrypt_file_bytes(enc, cipher, key)
-                            save_to = filedialog.asksaveasfilename(initialfile=(original_name or 'decrypted.bin'))
-                            if not save_to:
+                                enc_data = f.read()
+                            # Decrypt using stored cipher and provided password
+                            dec_data = decrypt_file_bytes(enc_data, cipher, password)
+                            # Save with original filename (restore extension)
+                            dest = filedialog.asksaveasfilename(initialfile=original_name)
+                            if not dest:
                                 return
-                            with open(save_to, 'wb') as out:
-                                out.write(dec)
-                            messagebox.showinfo('Saved', f'Decrypted file disimpan ke {save_to}')
+                            with open(dest, 'wb') as out:
+                                out.write(dec_data)
+                            messagebox.showinfo('Success', f'File berhasil didekripsi dan disimpan ke:\n{dest}')
                         except Exception as e:
-                            messagebox.showerror('Error', f'Gagal dekripsi: {e}')
-                    ttk.Button(matw, text='Decrypt & Save (masukkan key)', command=decrypt_action).pack(pady=4)
+                            messagebox.showerror('Error', f'Gagal dekripsi (mungkin password salah atau file rusak): {e}')
+                    ttk.Button(matw, text='Decrypt & Download (butuh password)', command=decrypt_and_download).pack(pady=6)
+                else:
+                    # Fallback for old materials without password (shouldn't happen with new system)
+                    ttk.Label(matw, text='File tidak dilindungi password (format lama)', foreground='red').pack(pady=6)
 
         ttk.Button(w, text='Open Selected', command=open_material).pack(pady=8)
 
@@ -389,41 +383,64 @@ class App:
             msgw.title(f'Message {mid}')
             lblh = ttk.Label(msgw, text=f'From: {sender} | {ts}', style='Title.TLabel')
             lblh.pack(anchor='w', padx=8, pady=6)
+            
+            # Show cipher info if encrypted
+            if is_encrypted:
+                ttk.Label(msgw, text=f'Pesan terenkripsi dengan: {(cipher or "unknown").upper()}', 
+                         foreground=self.dark_purple, font=('Segoe UI', 9, 'italic')).pack(anchor='w', padx=8, pady=2)
+            
             txt = tk.Text(msgw, width=80, height=12)
             txt.pack(padx=8, pady=4)
 
-            # If encrypted, prompt for key to decrypt (recipient must provide key)
+            # If encrypted, show ciphertext first, then allow decryption
             if is_encrypted:
-                def try_decrypt_and_show():
-                    key = simpledialog.askstring('Decrypt Message', 'Pesan terenkripsi. Masukkan key untuk mendekripsi:', parent=msgw, show='*')
+                # Display ciphertext immediately
+                txt.insert('end', body)
+                txt.config(state='disabled')
+                
+                def try_decrypt():
+                    key = simpledialog.askstring('Decrypt Message', 'Masukkan key untuk mendekripsi pesan:', parent=msgw)
                     if key is None:
                         return
+                    
                     lc = (cipher or '').lower()
-                    dec = ''
                     try:
-                        if lc == 'caesar':
+                        if lc == 'vigenere':
+                            dec = vigenere_decrypt_text(body, key)
+                        elif lc == 'caesar':
                             try:
                                 k = int(key)
                             except:
                                 k = 0
                             dec = caesar_decrypt_text(body, k)
-                        elif lc == 'vigenere':
-                            dec = vigenere_decrypt_text(body, key)
                         elif lc == 'xor':
                             dec = xor_decrypt_text(body, key)
                         elif lc == 'super':
                             dec = super_decrypt_text(body, key)
                         else:
-                            dec = '[Unknown cipher]'
-                        txt.insert('end', dec)
-                        txt.config(state='disabled')
-                        mark_message_read(mid)
+                            messagebox.showerror('Error', 'Cipher tidak dikenali')
+                            return
+                        
+                        # Check if decryption seems successful (basic validation)
+                        if dec and len(dec.strip()) > 0:
+                            # Replace text box content with decrypted text
+                            txt.config(state='normal')
+                            txt.delete('1.0', 'end')
+                            txt.insert('end', dec)
+                            txt.config(state='disabled')
+                            mark_message_read(mid)
+                            messagebox.showinfo('Success', 'Pesan berhasil didekripsi!')
+                        else:
+                            messagebox.showwarning('Warning', 'Key mungkin salah - hasil dekripsi kosong')
                     except Exception as e:
-                        messagebox.showerror('Error', f'Gagal dekripsi: {e}')
-                ttk.Button(msgw, text='Decrypt (masukkan key)', command=try_decrypt_and_show).pack(pady=6)
+                        messagebox.showerror('Error', f'Key salah atau gagal dekripsi: {e}')
+                
+                ttk.Button(msgw, text='Decrypt (masukkan key)', command=try_decrypt).pack(pady=6)
             else:
+                # Plain text message
                 txt.insert('end', body)
                 txt.config(state='disabled')
+                mark_message_read(mid)
                 mark_message_read(mid)
         ttk.Button(w, text='Open', command=open_msg).pack(pady=6)
 
@@ -501,16 +518,14 @@ class App:
         self._stego_text = tk.Text(dlg, width=60, height=6)
         self._stego_text.grid(row=5, column=1, padx=8, pady=4)
         ttk.Separator(dlg, orient='horizontal').grid(row=6, column=0, columnspan=2, sticky='ew', pady=6)
-        ttk.Label(dlg, text='Untuk File terenkripsi: Pilih file (pdf,ppt,docx, dll), pilih cipher & masukkan key.').grid(row=7, column=0, columnspan=2, sticky='w', padx=8)
+        ttk.Label(dlg, text='Untuk File terenkripsi: Pilih file (pdf,ppt,docx, dll) dan masukkan password.').grid(row=7, column=0, columnspan=2, sticky='w', padx=8)
         ttk.Button(dlg, text='Pilih File...', command=lambda: self._choose_material_file(dlg)).grid(row=8, column=0, sticky='w', padx=8, pady=6)
         self._file_path_var = tk.StringVar(value='')
         ttk.Label(dlg, textvariable=self._file_path_var).grid(row=8, column=1, sticky='w')
-        ttk.Label(dlg, text='Cipher:').grid(row=9, column=0, sticky='w', padx=8)
-        self._file_cipher_var = tk.StringVar(value='xor')
-        ttk.Combobox(dlg, values=['caesar','vigenere','xor'], textvariable=self._file_cipher_var, width=20).grid(row=9, column=1, sticky='w', padx=8)
-        ttk.Label(dlg, text='Key:').grid(row=10, column=0, sticky='w', padx=8)
-        self._file_key_ent = ttk.Entry(dlg, width=40)
-        self._file_key_ent.grid(row=10, column=1, sticky='w', padx=8, pady=6)
+        ttk.Label(dlg, text='Password (untuk mahasiswa decrypt):').grid(row=9, column=0, sticky='w', padx=8)
+        self._file_password_ent = ttk.Entry(dlg, width=40, show='*')
+        self._file_password_ent.grid(row=9, column=1, sticky='w', padx=8, pady=6)
+        ttk.Label(dlg, text='(Cipher XOR akan digunakan secara otomatis)', foreground='gray').grid(row=10, column=0, columnspan=2, sticky='w', padx=8)
 
         def do_upload():
             title = title_ent.get().strip()
@@ -535,48 +550,35 @@ class App:
                 messagebox.showinfo('Uploaded', 'Gambar stego berhasil di-upload')
                 dlg.destroy()
             else:
+                # Encrypted file upload (unified approach for all file types)
                 fpath = self._file_path_var.get().strip()
-                cipher = self._file_cipher_var.get().strip().lower()
-                key = self._file_key_ent.get().strip()
+                password = self._file_password_ent.get().strip()
                 if not fpath:
                     messagebox.showwarning('Error', 'Pilih file untuk di-upload')
                     return
+                if not password:
+                    messagebox.showwarning('Error', 'Password diperlukan untuk mengenkripsi file')
+                    return
                 orig = os.path.basename(fpath)
-                # Special handling for PDFs: treat as "locked" file with per-file password
-                if orig.lower().endswith('.pdf'):
-                    # ask for password to lock PDF
-                    pw = simpledialog.askstring('PDF Password', 'Masukkan password untuk mengunci file PDF (harus diingat):', parent=dlg, show='*')
-                    if pw is None or pw.strip() == '':
-                        messagebox.showwarning('Error', 'Password untuk PDF diperlukan (tidak boleh kosong)')
-                        return
-                    try:
-                        outname = f"{datetime.datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{orig}"
-                        outpath = os.path.join(MATERIAL_DIR, outname)
-                        with open(fpath, 'rb') as fsrc, open(outpath, 'wb') as fdst:
-                            fdst.write(fsrc.read())
-                        # store password hash (scrypt)
-                        salt, phash = hash_password(pw)
-                        add_material(title, 'file', outpath, orig, 'pdf_lock', self.user['id'], file_pw_salt=salt, file_pw_hash=phash)
-                        messagebox.showinfo('Uploaded', 'PDF berhasil di-upload dan dikunci dengan password')
-                        dlg.destroy()
-                    except Exception as e:
-                        messagebox.showerror('Error', f'Gagal upload: {e}')
-                        return
-                else:
-                    # normal encryption for other file types: bytes-level encrypt
-                    try:
-                        with open(fpath, 'rb') as f:
-                            data = f.read()
-                        enc = encrypt_file_bytes(data, cipher, key)
-                        outname = f"{datetime.datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{orig}.enc"
-                        outpath = os.path.join(MATERIAL_DIR, outname)
-                        with open(outpath, 'wb') as out:
-                            out.write(enc)
-                        add_material(title, 'file', outpath, orig, cipher, self.user['id'])
-                        messagebox.showinfo('Uploaded', 'File terenkripsi berhasil di-upload')
-                        dlg.destroy()
-                    except Exception as e:
-                        messagebox.showerror('Error', f'Gagal encrypt/upload: {e}')
+                try:
+                    # Read original file
+                    with open(fpath, 'rb') as f:
+                        data = f.read()
+                    # Encrypt using XOR cipher with the password as key
+                    cipher = 'xor'
+                    enc = encrypt_file_bytes(data, cipher, password)
+                    # Save encrypted file with .enc extension, preserving original name
+                    outname = f"{datetime.datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{orig}.enc"
+                    outpath = os.path.join(MATERIAL_DIR, outname)
+                    with open(outpath, 'wb') as out:
+                        out.write(enc)
+                    # Store password hash (scrypt) for verification
+                    salt, phash = hash_password(password)
+                    add_material(title, 'file', outpath, orig, cipher, self.user['id'], file_pw_salt=salt, file_pw_hash=phash)
+                    messagebox.showinfo('Uploaded', 'File terenkripsi berhasil di-upload dengan password')
+                    dlg.destroy()
+                except Exception as e:
+                    messagebox.showerror('Error', f'Gagal encrypt/upload: {e}')
         ttk.Button(dlg, text='Upload', command=do_upload).grid(row=11, column=0, pady=12, padx=8)
         ttk.Button(dlg, text='Cancel', command=dlg.destroy).grid(row=11, column=1, pady=12, padx=8)
 
@@ -665,28 +667,13 @@ class App:
         body_txt = tk.Text(dlg, width=60, height=8)
         body_txt.pack(padx=8, pady=6)
 
-        # Encryption options
-        enc_var = tk.IntVar(value=0)
-        def toggle_enc():
-            if enc_var.get():
-                cipher_cb.config(state='normal')
-                key_ent.config(state='normal')
-            else:
-                cipher_cb.config(state='disabled')
-                key_ent.config(state='disabled')
-        chk = ttk.Checkbutton(dlg, text='Encrypt message?', variable=enc_var, command=toggle_enc)
-        chk.pack(anchor='w', padx=8)
+        # Encryption with Vigenere cipher (automatic)
+        ttk.Label(dlg, text='Pesan akan dienkripsi dengan Vigenere Cipher', foreground=self.dark_purple, font=('Segoe UI', 10, 'bold')).pack(anchor='w', padx=8, pady=(8,4))
         enc_frame = ttk.Frame(dlg)
         enc_frame.pack(anchor='w', padx=8, pady=4)
-        ttk.Label(enc_frame, text='Cipher:').grid(row=0, column=0, sticky='w')
-        cipher_cb_var = tk.StringVar(value='xor')
-        cipher_cb = ttk.Combobox(enc_frame, values=['caesar','vigenere','xor','super'], textvariable=cipher_cb_var, width=12)
-        cipher_cb.grid(row=0, column=1, sticky='w', padx=6)
-        ttk.Label(enc_frame, text='Key:').grid(row=0, column=2, sticky='w', padx=(12,0))
-        key_ent = ttk.Entry(enc_frame, width=20)
-        key_ent.grid(row=0, column=3, sticky='w', padx=6)
-        cipher_cb.config(state='disabled')
-        key_ent.config(state='disabled')
+        ttk.Label(enc_frame, text='Key untuk enkripsi:').grid(row=0, column=0, sticky='w')
+        key_ent = ttk.Entry(enc_frame, width=30)
+        key_ent.grid(row=0, column=1, sticky='w', padx=6)
 
         def send():
             selected = lb.curselection()
@@ -695,30 +682,17 @@ class App:
             if not body:
                 messagebox.showwarning('Error', 'Isi pesan diperlukan')
                 return
-            if enc_var.get():
-                cipher = (cipher_cb_var.get() or 'xor').lower()
-                key = key_ent.get().strip()
-                # encrypt body according to selected cipher
-                if cipher == 'caesar':
-                    try:
-                        k = int(key)
-                    except:
-                        k = 0
-                    enc_body = caesar_encrypt_text(body, k)
-                elif cipher == 'vigenere':
-                    enc_body = vigenere_encrypt_text(body, key)
-                elif cipher == 'xor':
-                    enc_body = xor_encrypt_text(body, key)
-                elif cipher == 'super':
-                    enc_body = super_encrypt_text(body, key)
-                else:
-                    enc_body = body
-                is_enc_flag = 1
-            else:
-                enc_body = body
-                cipher = None
-                key = None
-                is_enc_flag = 0
+            
+            # Always encrypt with Vigenere cipher
+            key = key_ent.get().strip()
+            if not key:
+                messagebox.showwarning('Error', 'Key untuk enkripsi diperlukan')
+                return
+            
+            # Encrypt with Vigenere
+            cipher = 'vigenere'
+            enc_body = vigenere_encrypt_text(body, key)
+            is_enc_flag = 1
 
             if not selected:
                 add_message(self.user['id'], None, subject or '(no subject)', enc_body, is_encrypted=is_enc_flag, cipher=cipher, enc_key=key)
@@ -727,7 +701,7 @@ class App:
                     item = lb.get(idx)
                     sid = int(item.split(':',1)[0])
                     add_message(self.user['id'], sid, subject or '(no subject)', enc_body, is_encrypted=is_enc_flag, cipher=cipher, enc_key=key)
-            messagebox.showinfo('Sent', 'Pesan terkirim')
+            messagebox.showinfo('Sent', 'Pesan terkirim dengan enkripsi Vigenere')
             dlg.destroy()
         ttk.Button(dlg, text='Send', command=send).pack(pady=6)
 
